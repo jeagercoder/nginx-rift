@@ -250,6 +250,7 @@ class Scanner:
                 self.config.exploit_tries,
                 self.config.exploit_max_offsets,
                 self.config.shell_wait,
+                self.config.connect_timeout,
             )
             row.exploit = meta
             if meta.get("success"):

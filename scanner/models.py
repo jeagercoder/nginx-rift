@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import Enum
 
-from scanner.constants import CVE_ID
+from scanner.constants import CVE_ID, DEFAULT_CONNECT_TIMEOUT
 
 
 class VulnStatus(str, Enum):
@@ -96,7 +96,7 @@ class ScanConfig:
     ip_range: str
     ports: tuple[int, ...]
     threads: int = 50
-    connect_timeout: float = 3.0
+    connect_timeout: float = DEFAULT_CONNECT_TIMEOUT
     read_timeout: float = 5.0
     probe_path: str | None = None
     output: str = "scan_report.json"

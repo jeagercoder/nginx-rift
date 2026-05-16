@@ -1,7 +1,7 @@
 {
   "cve": "CVE-2026-42945",
   "target": "127.0.0.1",
-  "scanned_at": "2026-05-16T20:01:09.519522+00:00",
+  "scanned_at": "2026-05-16T20:19:14.754712+00:00",
   "total_vulnerable": 1,
   "vulnerable": [
     {
@@ -10,7 +10,7 @@
       "status": "confirmed_vulnerable",
       "nginx_version": "1.31",
       "confirmed": true,
-      "shell_peer": "127.0.0.1:50272"
+      "shell_peer": "127.0.0.1:42060"
     }
   ]
 }

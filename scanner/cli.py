@@ -5,7 +5,7 @@ from __future__ import annotations
 import argparse
 import sys
 
-from scanner.constants import DEFAULT_PORTS
+from scanner.constants import DEFAULT_CONNECT_TIMEOUT, DEFAULT_PORTS
 from scanner.engine import Scanner
 from scanner.exploit import format_scan_command
 from scanner.log import get_logger, setup_logging
@@ -65,7 +65,12 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument("--probe-path", metavar="PATH", help="URI prefix for + expansion probe")
     parser.add_argument("--threads", type=int, default=50)
-    parser.add_argument("--connect-timeout", type=float, default=3.0)
+    parser.add_argument(
+        "--connect-timeout",
+        type=float,
+        default=DEFAULT_CONNECT_TIMEOUT,
+        help=f"TCP connect timeout in seconds (default: {DEFAULT_CONNECT_TIMEOUT})",
+    )
     parser.add_argument("--read-timeout", type=float, default=5.0)
     parser.add_argument("-o", "--output", default="scan_report.json")
     parser.add_argument("-q", "--quiet", action="store_true", help="Console: warnings and summary only")

@@ -18,12 +18,14 @@ class VulnStatus(str, Enum):
     ERROR = "error"
 
 
-STATUSES_ELIGIBLE_FOR_EXPLOIT = frozenset({
+VULNERABLE_STATUSES = frozenset({
     VulnStatus.VULNERABLE_VERSION.value,
     VulnStatus.POSSIBLY_VULNERABLE.value,
     VulnStatus.LIKELY_VULNERABLE.value,
     VulnStatus.CONFIRMED_VULNERABLE.value,
 })
+
+STATUSES_ELIGIBLE_FOR_EXPLOIT = VULNERABLE_STATUSES
 
 
 class ConfigRisk(str, Enum):
@@ -99,7 +101,8 @@ class ScanConfig:
     probe_path: str | None = None
     output: str = "scan_report.json"
     quiet: bool = False
-    validate_shell: bool = False
+    exploit_validate: bool = False
+    shell: bool = False
     interactive_shell: bool = False
     listen_ip: str = ""
     listen_port: int = 0

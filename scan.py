@@ -2,9 +2,9 @@
 """
 CVE-2026-42945 (NGINX Rift) scanner.
 
+  python3 scan.py <target> -o report.json
   python3 scan.py <target> --listen-ip <host> --listen-port <port>
-
-Target: single IP, CIDR, or range (10.0.0.1-10.0.0.50).
+  python3 scan.py <target> --shell --listen-ip <host> --listen-port <port>
 """
 
 import sys

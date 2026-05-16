@@ -8,8 +8,11 @@ import sys
 from scanner.constants import DEFAULT_PORTS
 from scanner.engine import Scanner
 from scanner.exploit import format_scan_command
+from scanner.log import get_logger, setup_logging
 from scanner.models import ScanConfig
 from scanner.targets import parse_ports, validate_listen_host
+
+log = get_logger("cli")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -20,16 +23,11 @@ def build_parser() -> argparse.ArgumentParser:
             "Fingerprint only:\n"
             "  python3 scan.py <target> -o report.json\n"
             "\n"
-            "Fingerprint + reverse-shell validation (auto when listen set):\n"
+            "Fingerprint + reverse-shell validation:\n"
             "  python3 scan.py <target> --listen-ip <host> --listen-port <port>\n"
             "\n"
-            "Interactive shell + show payload command:\n"
+            "Interactive shell:\n"
             "  python3 scan.py <target> --shell --listen-ip <host> --listen-port <port>\n"
-            "\n"
-            "Examples:\n"
-            "  python3 scan.py 10.0.0.0/24 -o report.json\n"
-            "  python3 scan.py 127.0.0.1 --listen-ip host.docker.internal --listen-port 4444\n"
-            "  python3 scan.py 127.0.0.1 --shell --listen-ip host.docker.internal --listen-port 4444\n"
         ),
     )
     parser.add_argument(
@@ -39,7 +37,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--shell",
         action="store_true",
-        help="Interactive reverse shell session and print payload command",
+        help="Interactive reverse shell session and log payload command",
     )
     parser.add_argument(
         "--listen-ip",
@@ -70,7 +68,15 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--connect-timeout", type=float, default=3.0)
     parser.add_argument("--read-timeout", type=float, default=5.0)
     parser.add_argument("-o", "--output", default="scan_report.json")
-    parser.add_argument("-q", "--quiet", action="store_true")
+    parser.add_argument("-q", "--quiet", action="store_true", help="Console: warnings and summary only")
+    parser.add_argument("-v", "--verbose", action="store_true", help="Debug logging to console")
+    parser.add_argument(
+        "--log-file",
+        metavar="PATH",
+        default="scan.log",
+        help="Write full log to file (default: scan.log)",
+    )
+    parser.add_argument("--no-log-file", action="store_true", help="Do not write a log file")
     parser.add_argument("--exploit-tries", type=int, default=5)
     parser.add_argument("--exploit-max-offsets", type=int, default=5)
     parser.add_argument("--shell-wait", type=float, default=12.0)
@@ -101,6 +107,8 @@ def validate_args(args: argparse.Namespace) -> None:
         args.listen_ip = ""
         args.listen_port = 0
 
+    args.log_file = None if args.no_log_file else args.log_file
+
 
 def config_from_args(args: argparse.Namespace) -> ScanConfig:
     return ScanConfig(
@@ -112,6 +120,8 @@ def config_from_args(args: argparse.Namespace) -> ScanConfig:
         probe_path=args.probe_path,
         output=args.output,
         quiet=args.quiet,
+        verbose=args.verbose,
+        log_file=args.log_file,
         exploit_validate=args.exploit_validate,
         shell=args.shell,
         interactive_shell=args.interactive_shell,
@@ -129,37 +139,43 @@ def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
 
     if args.threads < 1:
-        print("[!] --threads must be >= 1", file=sys.stderr)
+        log.error("--threads must be >= 1")
         return 2
 
     try:
         validate_args(args)
         config = config_from_args(args)
     except ValueError as exc:
-        print(f"[!] {exc}", file=sys.stderr)
+        setup_logging(quiet=False, verbose=False, log_file=None)
+        log = get_logger("cli")
+        log.error("%s", exc)
         return 2
 
-    if config.exploit_validate and not config.quiet:
-        print(
-            f"[*] Reverse-shell validation on 0.0.0.0:{config.listen_port} "
-            f"(callback {config.listen_ip}:{config.listen_port})"
+    setup_logging(quiet=config.quiet, verbose=config.verbose, log_file=config.log_file)
+    log = get_logger("cli")
+
+    if config.exploit_validate:
+        log.info(
+            "Reverse-shell validation — listen 0.0.0.0:%s, callback %s:%s",
+            config.listen_port,
+            config.listen_ip,
+            config.listen_port,
         )
         if config.shell:
-            print(format_scan_command(config.ip_range, config.listen_ip, config.listen_port))
-        print()
+            log.info(format_scan_command(
+                config.ip_range, config.listen_ip, config.listen_port,
+            ))
 
     try:
         scanner = Scanner(config)
         scanner.run()
         scanner.write_report()
     except OSError as exc:
-        print(f"[!] {exc}", file=sys.stderr)
+        log.error("%s", exc)
         return 2
 
-    if not config.quiet:
-        total_vuln = len(scanner.vulnerable_results())
-        print(f"\n[*] Vulnerable: {total_vuln}")
-        print(f"[+] {config.output}")
+    total_vuln = len(scanner.vulnerable_results())
+    log.warning("Vulnerable: %s", total_vuln)
     return 0
 
 

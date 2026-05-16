@@ -47,7 +47,10 @@ python3 scan.py <target> [options]
 | `--exploit-port` | Nginx exploit port if different from scanned port |
 | `-o`, `--output` | Report file (default: `scan_report.json`) |
 | `--threads` | Worker threads (default: `50`) |
-| `-q`, `--quiet` | Less console output |
+| `-q`, `--quiet` | Console: warnings and summary only (full log still in file) |
+| `-v`, `--verbose` | Debug output on console |
+| `--log-file` | Log file path (default: `scan.log`) |
+| `--no-log-file` | Disable log file |
 
 ### Modes
 
@@ -71,11 +74,25 @@ python3 scan.py <target> [options]
 
 ## Report
 
-Only **vulnerable** hosts are saved. Console summary:
+Only **vulnerable** hosts are saved.
+
+### Logging
+
+- Console: timestamped `[INFO]` / `[WARNING]` lines
+- File: `scan.log` by default (all detail including debug probes)
+- `-q`: quiet console (vulnerable hits + final count only)
+- `-v`: verbose console (per-probe debug)
 
 ```text
-[*] Vulnerable: 2
-[+] scan_report.json
+2026-05-16 12:00:00 [INFO    ] Target '127.0.0.1' — 1 IPs, 1 host:port pairs, 50 threads
+2026-05-16 12:00:01 [WARNING ] [!!!] 127.0.0.1:19321 -> likely_vulnerable (nginx 1.31.0)
+2026-05-16 12:00:05 [WARNING ] Vulnerable: 1
+```
+
+Console summary:
+
+```text
+Vulnerable: 2
 ```
 
 Example `scan_report.json`:

@@ -101,6 +101,8 @@ class ScanConfig:
     probe_path: str | None = None
     output: str = "scan_report.json"
     quiet: bool = False
+    verbose: bool = False
+    log_file: str | None = None
     exploit_validate: bool = False
     shell: bool = False
     interactive_shell: bool = False

